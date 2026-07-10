@@ -1,6 +1,6 @@
 import requests
 
-SERVER_URL = "http://192.168.1.188:5001/ai/message"  # Your Mac's NuerovaAI server
+SERVER_URL = os.getenv("NUEROVAAI_SERVER_URL", "http://127.0.0.1:5001/ai/message" # Your Mac's NuerovaAI server
 
 def send_to_nuerova(text, user_id="pi_user_1"):
     payload = {"user_id": user_id, "text": text}
