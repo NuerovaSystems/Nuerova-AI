@@ -1,10 +1,12 @@
 from os import name
 from flask import Flask, request, jsonify
+from flasgger import Swagger
 import torch
 import torch.nn as nn
 import re
 
 app = Flask(__name__)
+swagger = Swagger(app)
 
 # Simple in-memory store for user state (resets when server restarts)
 memory = {}
@@ -69,10 +71,67 @@ def try_calculate(text: str):
 
 @app.route("/health", methods=["GET"])
 def health():
+    """
+    Health check
+    ---
+    summary: Simple health check to see if the NuerovaAI server is running.
+    produces:
+      - application/json
+    responses:
+      200:
+        description: Server is up
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "ok"
+    """
     return jsonify({"status": "ok"}), 200
 
 @app.route("/ai/complete", methods=["POST"])
 def ai_complete():
+    """
+    Tiny completion-style endpoint
+    ---
+    summary: Send a prompt and get a simple, rule-based completion from NuerovaAI.
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - prompt
+          properties:
+            prompt:
+              type: string
+              example: "hello, can you help me?"
+    responses:
+      200:
+        description: Completion result
+        schema:
+          type: object
+          properties:
+            result:
+              type: string
+              example: "Hi there, I'm your mini AI. How can I help you today?"
+      400:
+        description: Bad request (validation error)
+        schema:
+          type: object
+          properties:
+            error:
+              type: boolean
+              example: True
+            message:
+              type: string
+              example: "Field 'prompt' is required"
+    """
     # 1. Check Content-Type
     if not request.is_json:
         return make_error("Request body must be JSON", 400)
@@ -93,7 +152,7 @@ def ai_complete():
     if not isinstance(prompt, str):
         return make_error("Field 'prompt' must be a string", 400)
 
-        # 4. Tiny rule-based "AI brain"
+    # 4. Tiny rule-based "AI brain"
     text = prompt.lower().strip()
 
     if "hello" in text or "hi" in text:
@@ -113,6 +172,61 @@ def ai_complete():
 
 @app.route("/ai/sentiment", methods=["POST"])
 def ai_sentiment():
+    """
+    Tiny sentiment analysis
+    ---
+    summary: Analyze sentiment of a piece of text using the NuerovaAI tiny sentiment model.
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "I really love working on this project."
+    responses:
+      200:
+        description: Sentiment analysis result
+        schema:
+          type: object
+          properties:
+            model:
+              type: string
+              example: "NuerovaAI tiny sentiment v1"
+            text:
+              type: string
+              example: "I really love working on this project."
+            label:
+              type: string
+              description: "positive or negative"
+              example: "positive"
+            score:
+              type: number
+              format: float
+              example: 0.87
+            reaction:
+              type: string
+              example: "NuerovaAI: I'm glad you feel good about this. 🙂"
+      400:
+        description: Bad request (validation error)
+        schema:
+          type: object
+          properties:
+            error:
+              type: boolean
+              example: True
+            message:
+              type: string
+              example: "Field 'text' is required"
+    """
     # 1. Validate JSON
     if not request.is_json:
         return make_error("Request body must be JSON", 400)
@@ -131,6 +245,7 @@ def ai_sentiment():
     if not isinstance(text, str):
         return make_error("Field 'text' must be a string", 400)
 
+    # ... rest of your existing ai_sentiment code ...
     # 3. Run through NuerovaAI sentiment model
     vec = text_to_vector(text).unsqueeze(0)  # shape [1, vocab_size]
 
@@ -155,6 +270,61 @@ def ai_sentiment():
 
 @app.route("/ai/moderate", methods=["POST"])
 def ai_moderate():
+    """
+    Tiny content moderation
+    ---
+    summary: Check a piece of text for unsafe content using NuerovaAI's tiny moderator.
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              example: "I feel really upset and I'm thinking about hurting myself."
+    responses:
+      200:
+        description: Moderation result
+        schema:
+          type: object
+          properties:
+            model:
+              type: string
+              example: "NuerovaAI tiny moderator v1"
+            text:
+              type: string
+              example: "I feel really upset and I'm thinking about hurting myself."
+            label:
+              type: string
+              description: "safe or unsafe"
+              example: "unsafe"
+            unsafe_matches:
+              type: array
+              items:
+                type: string
+              example:
+                - "hurt myself"
+                - "self harm"
+      400:
+        description: Bad request (validation error)
+        schema:
+          type: object
+          properties:
+            error:
+              type: boolean
+              example: True
+            message:
+              type: string
+              example: "Field 'text' is required"
+    """
     # 1. Validate JSON
     if not request.is_json:
         return make_error("Request body must be JSON", 400)
@@ -173,6 +343,7 @@ def ai_moderate():
     if not isinstance(text, str):
         return make_error("Field 'text' must be a string", 400)
 
+    # ... rest of your existing moderation code ...
     # 3. Tiny rule-based moderation "brain"
     lowered = text.lower()
 
@@ -206,9 +377,68 @@ def ai_moderate():
 
 @app.route("/ai/chat", methods=["POST"])
 def ai_chat():
+    """
+    Tiny chat endpoint
+    ---
+    summary: Chat with NuerovaAI using a messages list similar to OpenAI-style chat.
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - messages
+          properties:
+            messages:
+              type: array
+              description: "List of chat messages; must include at least one user message."
+              items:
+                type: object
+                properties:
+                  role:
+                    type: string
+                    example: "user"
+                  content:
+                    type: string
+                    example: "hello, who are you?"
+              example:
+                - role: "system"
+                  content: "You are a helpful assistant."
+                - role: "user"
+                  content: "hello, who are you?"
+    responses:
+      200:
+        description: Chat reply from NuerovaAI
+        schema:
+          type: object
+          properties:
+            model:
+              type: string
+              example: "NuerovaAI tiny chat v1"
+            reply:
+              type: string
+              example: "Hi, I'm NuerovaAI. What would you like to talk about?"
+      400:
+        description: Bad request (validation error)
+        schema:
+          type: object
+          properties:
+            error:
+              type: boolean
+              example: True
+            message:
+              type: string
+              example: "Field 'messages' is required"
+    """
     # 1. Validate JSON
     if not request.is_json:
         return make_error("Request body must be JSON", 400)
+    # ... rest of your existing ai_chat code ...
 
     data = request.get_json()
 
@@ -260,6 +490,90 @@ def ai_chat():
 
 @app.route("/ai/message", methods=["POST"])
 def ai_message():
+    """
+    NuerovaAI message endpoint
+    ---
+    summary: Send a message to NuerovaAI and get moderation, sentiment, memory, and a reply.
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - text
+            - user_id
+          properties:
+            text:
+              type: string
+              example: "I'm really excited about this new project!"
+            user_id:
+              type: string
+              example: "user_123"
+    responses:
+      200:
+        description: Successful AI processing of the message
+        schema:
+          type: object
+          properties:
+            moderation:
+              type: object
+              properties:
+                label:
+                  type: string
+                  description: "safe or unsafe"
+                  example: "safe"
+                unsafe_matches:
+                  type: array
+                  items:
+                    type: string
+                  example: []
+            sentiment:
+              description: "Sentiment result for safe messages, or null for unsafe"
+              example:
+                label: "positive"
+                score: 0.82
+            chat:
+              type: object
+              properties:
+                reply:
+                  type: string
+                  example: "NuerovaAI: I'm glad you're feeling good about this!"
+            memory:
+              type: object
+              properties:
+                unsafe_count:
+                  type: integer
+                  example: 1
+                mood_summary:
+                  type: object
+                  properties:
+                    positive:
+                      type: integer
+                      example: 3
+                    negative:
+                      type: integer
+                      example: 1
+                    neutral:
+                      type: integer
+                      example: 2
+      400:
+        description: Bad request (validation error)
+        schema:
+          type: object
+          properties:
+            error:
+              type: boolean
+              example: True
+            message:
+              type: string
+              example: "Field 'text' is required"
+    """
+    # your existing code...
     # 1. Validate JSON
     if not request.is_json:
         return make_error("Request body must be JSON", 400)
@@ -284,6 +598,7 @@ def ai_message():
         return make_error("Field 'user_id' must be a string", 400)
 
     lowered = text.lower().strip()
+    # ... rest of your existing ai_message logic ...
 
     # --- Moderation step (same as before) ---
     unsafe_keywords = [
