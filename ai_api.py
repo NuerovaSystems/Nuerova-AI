@@ -693,7 +693,6 @@ def ai_message():
         }), 200
 
     # --- Sentiment step (reuse your model) ---
-        # --- Sentiment step (reuse your model) ---
     vec = text_to_vector(text).unsqueeze(0)
 
     with torch.no_grad():
@@ -793,119 +792,61 @@ def ai_message():
 
     # --- Chat reply step (use sentiment + history) ---
     if reply is None:
-        if "hello" in lowered or "hi" in lowered:
-            if recent_neg >= 3:
-                reply = (
-                    "Hi again. I've seen several negative messages from you recently. "
-                    "Do you want to talk about what's been going wrong?"
-                )
-            elif recent_pos >= 3:
-                reply = (
-                    "Hi again! You've sounded pretty positive lately — that's great. "
-                    "What's been going well?"
-                )
-            elif user_state["last_sentiment"] == "negative":
-                reply = "Hi again. I've noticed some of your messages sound negative. Want to talk about it?"
-            elif user_state["last_sentiment"] == "positive":
-                reply = "Hi again! You seemed positive in your last message — I love that. How are you now?"
-            else:  # neutral
-                reply = "Hi, I'm NuerovaAI. How are you feeling today?"
-
-        elif sentiment_label == "positive":
-            if recent_pos >= 3:
-                reply = "You're on a roll with positive messages — I love this energy!"
-            else:
-                reply = "I'm glad you're feeling positive about this!"
-
-        elif sentiment_label == "negative":
-            if recent_neg >= 3:
-                reply = (
-                    "It seems like you've been negative in several recent messages. "
-                    "Do you want to focus on the biggest issue first?"
-                )
-            else:
-                reply = "I'm sorry this feels negative. Want to talk more about what's bothering you?"
-
-        else:  # neutral
-            reply = "Sounds like you're feeling kind of neutral about this."
-
-    # --- Final response ---
-    return jsonify({
-        "moderation": {
-            "label": moderation_label,
-            "unsafe_matches": matched
-        },
-        "sentiment": {
-            "label": sentiment_label,
-            "score": prob
-        },
-        "chat": {
-            "reply": reply
-        },
-        "memory": {
-            "last_sentiment": user_state["last_sentiment"],
-            "unsafe_count": user_state["unsafe_count"],
-            "message_count": len(user_state["messages"]),
-            "mood_summary": user_state["mood_summary"],
-            "goals": user_state.get("goals", [])
-        }
-    }), 200
-
-    # --- Chat reply step (use sentiment + history) ---
-    if "hello" in lowered or "hi" in lowered:
+      if "hello" in lowered or "hi" in lowered:
         if recent_neg >= 3:
-            reply = (
-                "Hi again. I've seen several negative messages from you recently. "
-                "Do you want to talk about what's been going wrong?"
-            )
+          reply = (
+            "Hi again. I've seen several negative messages from you recently. "
+            "Do you want to talk about what's been going wrong?"
+          )
         elif recent_pos >= 3:
-            reply = (
-                "Hi again! You've sounded pretty positive lately — that's great. "
-                "What's been going well?"
-            )
+          reply = (
+            "Hi again! You've sounded pretty positive lately — that's great. "
+            "What's been going well?"
+          )
         elif user_state["last_sentiment"] == "negative":
-            reply = "Hi again. I've noticed some of your messages sound negative. Want to talk about it?"
+          reply = "Hi again. I've noticed some of your messages sound negative. Want to talk about it?"
         elif user_state["last_sentiment"] == "positive":
-            reply = "Hi again! You seemed positive in your last message — I love that. How are you now?"
-        else:  # neutral
-            reply = "Hi, I'm NuerovaAI. How are you feeling today?"
+          reply = "Hi again! You seemed positive in your last message — I love that. How are you now?"
+        else:
+          reply = "Hi, I'm NuerovaAI. How are you feeling today?"
 
-    elif sentiment_label == "positive":
+      elif sentiment_label == "positive":
         if recent_pos >= 3:
-            reply = "You're on a roll with positive messages — I love this energy!"
+          reply = "You're on a roll with positive messages — I love this energy!"
         else:
-            reply = "I'm glad you're feeling positive about this!"
+          reply = "I'm glad you're feeling positive about this!"
 
-    elif sentiment_label == "negative":
+      elif sentiment_label == "negative":
         if recent_neg >= 3:
-            reply = (
-                "It seems like you've been negative in several recent messages. "
-                "Do you want to focus on the biggest issue first?"
-            )
+          reply = (
+            "It seems like you've been negative in several recent messages. "
+            "Do you want to focus on the biggest issue first?"
+          )
         else:
-            reply = "I'm sorry this feels negative. Want to talk more about what's bothering you?"
+          reply = "I'm sorry this feels negative. Want to talk more about what's bothering you?"
 
-    else:  # neutral
+      else:
         reply = "Sounds like you're feeling kind of neutral about this."
 
     return jsonify({
-        "moderation": {
-            "label": moderation_label,
-            "unsafe_matches": matched
-        },
-        "sentiment": {
-            "label": sentiment_label,
-            "score": prob
-        },
-        "chat": {
-            "reply": reply
-        },
-        "memory": {
-            "last_sentiment": user_state["last_sentiment"],
-            "unsafe_count": user_state["unsafe_count"],
-            "message_count": len(user_state["messages"]),
-            "mood_summary": user_state["mood_summary"]
-        }
+      "moderation": {
+        "label": moderation_label,
+        "unsafe_matches": matched
+      },
+      "sentiment": {
+        "label": sentiment_label,
+        "score": prob
+      },
+      "chat": {
+        "reply": reply
+      },
+      "memory": {
+        "last_sentiment": user_state["last_sentiment"],
+        "unsafe_count": user_state["unsafe_count"],
+        "message_count": len(user_state["messages"]),
+        "mood_summary": user_state["mood_summary"],
+        "goals": user_state.get("goals", [])
+      }
     }), 200
 
 @app.route("/ai/message/history", methods=["GET"])
