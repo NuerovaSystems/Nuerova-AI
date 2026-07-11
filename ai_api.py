@@ -39,10 +39,23 @@ def text_to_vector(text: str) -> torch.Tensor:
             vec[word2idx[word]] += 1
     return vec
 
-def make_error(message, status_code):
+def make_error(message: str, status_code: int, code: str = None):
+    """
+    Standard error response helper for neurOvaAI.
+    """
+    if code is None:
+        if status_code == 400:
+            code = "BAD_REQUEST"
+        elif status_code == 404:
+            code = "NOT_FOUND"
+        else:
+            code = "INTERNAL_ERROR"
+
     return jsonify({
-        "error": True,
-        "message": message
+        "error": {
+            "code": code,
+            "message": message
+        }
     }), status_code
 
 def try_calculate(text: str):
@@ -126,11 +139,14 @@ def ai_complete():
           type: object
           properties:
             error:
-              type: boolean
-              example: True
-            message:
-              type: string
-              example: "Field 'prompt' is required"
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "BAD_REQUEST"
+                message:
+                  type: string
+                  example: "Field 'prompt' is required"
     """
     # 1. Check Content-Type
     if not request.is_json:
@@ -221,11 +237,14 @@ def ai_sentiment():
           type: object
           properties:
             error:
-              type: boolean
-              example: True
-            message:
-              type: string
-              example: "Field 'text' is required"
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "BAD_REQUEST"
+                message:
+                  type: string
+                  example: "Field 'text' is required"
     """
     # 1. Validate JSON
     if not request.is_json:
@@ -319,11 +338,14 @@ def ai_moderate():
           type: object
           properties:
             error:
-              type: boolean
-              example: True
-            message:
-              type: string
-              example: "Field 'text' is required"
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "BAD_REQUEST"
+                message:
+                  type: string
+                  example: "Field 'text' is required"
     """
     # 1. Validate JSON
     if not request.is_json:
@@ -429,11 +451,14 @@ def ai_chat():
           type: object
           properties:
             error:
-              type: boolean
-              example: True
-            message:
-              type: string
-              example: "Field 'messages' is required"
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "BAD_REQUEST"
+                message:
+                  type: string
+                  example: "Field 'messages' is required"
     """
     # 1. Validate JSON
     if not request.is_json:
@@ -567,11 +592,14 @@ def ai_message():
           type: object
           properties:
             error:
-              type: boolean
-              example: True
-            message:
-              type: string
-              example: "Field 'text' is required"
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "BAD_REQUEST"
+                message:
+                  type: string
+                  example: "Field 'text' is required"
     """
     # your existing code...
     # 1. Validate JSON
@@ -664,7 +692,8 @@ def ai_message():
             }
         }), 200
 
-           # --- Sentiment step (reuse your model) ---
+    # --- Sentiment step (reuse your model) ---
+        # --- Sentiment step (reuse your model) ---
     vec = text_to_vector(text).unsqueeze(0)
 
     with torch.no_grad():
@@ -682,8 +711,10 @@ def ai_message():
         "messages": [],
         "last_sentiment": None,
         "unsafe_count": 0,
-        "mood_summary": {"positive": 0, "negative": 0, "neutral": 0}
+        "mood_summary": {"positive": 0, "negative": 0, "neutral": 0},
+        "goals": []  # NEW
     })
+
     user_state["messages"].append({"text": text, "sentiment": sentiment_label})
     user_state["last_sentiment"] = sentiment_label
     # keep only last 10 messages for this user
@@ -709,9 +740,30 @@ def ai_message():
     recent_neg = mood["negative"]
     recent_pos = mood["positive"]
 
+    # --- Simple goal detection ---
+    reply = None  # we'll reuse this for calculator / chat reply
+
+    goal_prefixes = [
+        "my goal is",
+        "my goals are",
+        "i want to",
+        "i want",
+        "i would like to"
+    ]
+
+    if any(lowered.startswith(prefix) for prefix in goal_prefixes):
+        # make sure goals list exists
+        if "goals" not in user_state or user_state["goals"] is None:
+            user_state["goals"] = []
+
+        user_state["goals"].append(text)
+        memory[user_id] = user_state  # save updated goals
+
+        reply = "Got it, I'll track this goal for you."
+
     # --- Simple calculator tool ---
     # If the user seems to be asking for a calculation, try it
-    if any(word in lowered for word in ["calculate", "calc", "what is", "what's"]) and any(ch.isdigit() for ch in text):
+    if reply is None and any(word in lowered for word in ["calculate", "calc", "what is", "what's"]) and any(ch.isdigit() for ch in text):
         ok, calc_message = try_calculate(text)
         if ok:
             reply = f"{calc_message} (calculated by NuerovaAI)."
@@ -734,9 +786,70 @@ def ai_message():
                 "last_sentiment": user_state["last_sentiment"],
                 "unsafe_count": user_state["unsafe_count"],
                 "message_count": len(user_state["messages"]),
-                "mood_summary": user_state["mood_summary"]
+                "mood_summary": user_state["mood_summary"],
+                "goals": user_state.get("goals", [])
             }
         }), 200
+
+    # --- Chat reply step (use sentiment + history) ---
+    if reply is None:
+        if "hello" in lowered or "hi" in lowered:
+            if recent_neg >= 3:
+                reply = (
+                    "Hi again. I've seen several negative messages from you recently. "
+                    "Do you want to talk about what's been going wrong?"
+                )
+            elif recent_pos >= 3:
+                reply = (
+                    "Hi again! You've sounded pretty positive lately — that's great. "
+                    "What's been going well?"
+                )
+            elif user_state["last_sentiment"] == "negative":
+                reply = "Hi again. I've noticed some of your messages sound negative. Want to talk about it?"
+            elif user_state["last_sentiment"] == "positive":
+                reply = "Hi again! You seemed positive in your last message — I love that. How are you now?"
+            else:  # neutral
+                reply = "Hi, I'm NuerovaAI. How are you feeling today?"
+
+        elif sentiment_label == "positive":
+            if recent_pos >= 3:
+                reply = "You're on a roll with positive messages — I love this energy!"
+            else:
+                reply = "I'm glad you're feeling positive about this!"
+
+        elif sentiment_label == "negative":
+            if recent_neg >= 3:
+                reply = (
+                    "It seems like you've been negative in several recent messages. "
+                    "Do you want to focus on the biggest issue first?"
+                )
+            else:
+                reply = "I'm sorry this feels negative. Want to talk more about what's bothering you?"
+
+        else:  # neutral
+            reply = "Sounds like you're feeling kind of neutral about this."
+
+    # --- Final response ---
+    return jsonify({
+        "moderation": {
+            "label": moderation_label,
+            "unsafe_matches": matched
+        },
+        "sentiment": {
+            "label": sentiment_label,
+            "score": prob
+        },
+        "chat": {
+            "reply": reply
+        },
+        "memory": {
+            "last_sentiment": user_state["last_sentiment"],
+            "unsafe_count": user_state["unsafe_count"],
+            "message_count": len(user_state["messages"]),
+            "mood_summary": user_state["mood_summary"],
+            "goals": user_state.get("goals", [])
+        }
+    }), 200
 
     # --- Chat reply step (use sentiment + history) ---
     if "hello" in lowered or "hi" in lowered:
@@ -794,6 +907,91 @@ def ai_message():
             "mood_summary": user_state["mood_summary"]
         }
     }), 200
+
+@app.route("/ai/message/history", methods=["GET"])
+def get_message_history():
+    """
+    Get neurOva AI message history
+    ---
+    tags:
+      - ai
+    summary: Get neurOva AI message history
+    description: |
+      Returns the recent neurOva AI message history.
+      If there is no history yet, returns an empty list of messages and a message string.
+    parameters:
+      - name: user_id
+        in: query
+        type: string
+        required: true
+        description: ID of the user whose history should be fetched
+    responses:
+      200:
+        description: Message history successfully retrieved
+        schema:
+          type: object
+          properties:
+            messages:
+              type: array
+              description: List of messages in the neurOva AI history
+              items:
+                type: object
+                properties:
+                  text:
+                    type: string
+                    example: "Hi"
+                  sentiment:
+                    type: string
+                    example: "positive"
+            message:
+              type: string
+              description: Optional info message when there is no history
+              example: "No history"
+      500:
+        description: Internal server error while retrieving history
+        schema:
+          type: object
+          properties:
+            error:
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "INTERNAL_ERROR"
+                message:
+                  type: string
+                  example: "Something went wrong. Please try again later."
+    """
+    try:
+        user_id = request.args.get("user_id")
+
+        if not user_id:
+            return jsonify({
+                "error": {
+                    "code": "BAD_REQUEST",
+                    "message": "user_id query parameter is required."
+                }
+            }), 400
+
+        user_state = memory.get(user_id)
+
+        if not user_state or not user_state.get("messages"):
+            return jsonify({
+                "messages": [],
+                "message": "No history"
+            }), 200
+
+        return jsonify({
+            "messages": user_state["messages"]
+        }), 200
+
+    except Exception:
+        return jsonify({
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "Something went wrong. Please try again later."
+            }
+        }), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=True)
