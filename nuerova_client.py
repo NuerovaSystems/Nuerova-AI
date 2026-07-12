@@ -1,4 +1,5 @@
 import requests
+import os
 
 SERVER_URL = os.getenv("NUEROVAAI_SERVER_URL", "http://127.0.0.1:5001/ai/message" # Your Mac's NuerovaAI server
 
